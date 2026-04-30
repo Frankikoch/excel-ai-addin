@@ -10,20 +10,34 @@
   <div class="app-container">
     <header class="header">
       <h1>🤖 Excel AI</h1>
-      <button id="settings-btn" title="Configuración">⚙️</button>
+      <div class="header-controls">
+        <div id="model-selector"></div>
+        <div id="theme-toggle"></div>
+        <button id="settings-btn" title="Configuración">⚙️</button>
+      </div>
     </header>
+    
+    <div class="toolbar">
+      <button class="toolbar-btn" data-cmd="analyze" title="Ctrl+Shift+A">📊 Analizar</button>
+      <button class="toolbar-btn" data-cmd="explain" title="Ctrl+Shift+E">📝 Explicar</button>
+      <button class="toolbar-btn" data-cmd="fix" title="Ctrl+Shift+F">🐛 Corregir</button>
+      <button class="toolbar-btn" data-cmd="summarize" title="Ctrl+Shift+S">📋 Resumir</button>
+      <button class="toolbar-btn" id="cmd-palette-btn" title="Ctrl+K">⌘ Paleta</button>
+    </div>
     
     <div class="privacy-bar">
       <label>
-        <input type="checkbox" id="privacy-toggle">
-        🔒_privacidad
+        <input type="checkbox" id="privacy-toggle" checked>
+        🔒 Privacidad
       </label>
+      <span class="status-text" id="status">🟢 Listo</span>
     </div>
     
     <div class="chat-container" id="chat-container">
       <div class="welcome-message">
         <h2>Bienvenido a Excel AI 🤖</h2>
         <p>Tu asistente de IA integrado en Excel</p>
+        <p class="shortcut-hint">Usa <kbd>Ctrl+K</kbd> paraCommands rápidos</p>
         <div class="quick-actions">
           <button class="quick-btn" data-prompt="Analiza esta hoja de cálculo">📊 Analizar datos</button>
           <button class="quick-btn" data-prompt="Explica esta fórmula">📝 Explicar fórmula</button>
@@ -33,17 +47,26 @@
       <div id="messages"></div>
     </div>
     
+    <div class="citations-bar" id="cell-citations"></div>
+    
     <div class="input-container">
       <textarea id="user-input" placeholder="Pregunta o describe lo que necesitas..." rows="2"></textarea>
       <button id="send-btn">Enviar</button>
     </div>
     
     <footer class="status-bar">
-      <span id="status">🟢 Listo</span>
       <span id="model-display">Modelo: OpenCode</span>
+      <span id="version">v0.3.0</span>
     </footer>
   </div>
   
-  <script src="assets/app.js" type="module"></script>
+  <!-- Components -->
+  <script type="module" src="components/model-selector.js"></script>
+  <script type="module" src="components/theme-toggle.js"></script>
+  <script type="module" src="components/command-palette.js"></script>
+  <script type="module" src="components/diff-preview.js"></script>
+  <script type="module" src="components/cell-citations.js"></script>
+  <script type="module" src="components/audit-log.js"></script>
+  <script src="assets/app.js"></script>
 </body>
 </html>
