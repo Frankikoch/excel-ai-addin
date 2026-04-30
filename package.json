@@ -1,0 +1,20 @@
+{
+  "name": "excel-ai-addin",
+  "version": "0.1.0",
+  "description": "AI Assistant for Microsoft Excel powered by OpenCode",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": ["excel", "ai", "opencode", "excel-addin"],
+  "author": "franki",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12"
+  }
+}

@@ -1,0 +1,2 @@
+{ "compilerOptions": { "target": "ES2022", "module": "ESNext", "moduleResolution": "bundler", "strict": false, "skipLibCheck": true, "esModuleInterop": true, "outDir": "dist", "types": ["node"] }, "include": ["src/server/**/*", "src/shared/**/*"] 
+}

@@ -1,0 +1,1 @@
+{ "compilerOptions": { "target": "ES2022", "module": "ES2022", "moduleResolution": "bundler", "strict": false, "skipLibCheck": true, "esModuleInterop": true, "outDir": "dist", "types": [] }, "include": ["src/browser/**/*"] } 
