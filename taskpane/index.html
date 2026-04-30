@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🤖 Excel AI</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <h1>🤖 Excel AI</h1>
+      <button id="settings-btn" title="Configuración">⚙️</button>
+    </header>
+    
+    <div class="privacy-bar">
+      <label>
+        <input type="checkbox" id="privacy-toggle">
+        🔒_privacidad
+      </label>
+    </div>
+    
+    <div class="chat-container" id="chat-container">
+      <div class="welcome-message">
+        <h2>Bienvenido a Excel AI 🤖</h2>
+        <p>Tu asistente de IA integrado en Excel</p>
+        <div class="quick-actions">
+          <button class="quick-btn" data-prompt="Analiza esta hoja de cálculo">📊 Analizar datos</button>
+          <button class="quick-btn" data-prompt="Explica esta fórmula">📝 Explicar fórmula</button>
+          <button class="quick-btn" data-prompt="Corrige errores en esta hoja">🐛 Corregir errores</button>
+        </div>
+      </div>
+      <div id="messages"></div>
+    </div>
+    
+    <div class="input-container">
+      <textarea id="user-input" placeholder="Pregunta o describe lo que necesitas..." rows="2"></textarea>
+      <button id="send-btn">Enviar</button>
+    </div>
+    
+    <footer class="status-bar">
+      <span id="status">🟢 Listo</span>
+      <span id="model-display">Modelo: OpenCode</span>
+    </footer>
+  </div>
+  
+  <script src="assets/app.js" type="module"></script>
+</body>
+</html>

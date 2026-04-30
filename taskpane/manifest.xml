@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/officeapp/2008/11/05" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="Taskpane">
+  
+  <Id>excel-ai-addin-v1</Id>
+  <Version>1.0.0</Version>
+  <ProviderName>franki</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="🤖 Excel AI"/>
+  <Description DefaultValue="AI Assistant powered by OpenCode"/>
+  
+  <Hosts>
+    <Host Name="Workbook"/>
+  </Hosts>
+  
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="WorkbookApi"/>
+    </Sets>
+  </Requirements>
+  
+  <DefaultSettings>
+    <SourceLocation>index.html</SourceLocation>
+  </DefaultSettings>
+  
+  <Permissions>ReadWriteDocument</Permissions>
+  
+  <Runtimes>
+    <Runtime resid="taskpane.url"寿命="15">
+      <AppDomains>
+        <AppDomain>AppDomain1</AppDomain>
+      </AppDomains>
+    </Runtime>
+  </Runtimes>
+  
+  <DesktopFormFactor>
+    <ExtensionPoint xsi:type="Taskpane">
+      <SourceLocation>
+        <bt:Url>index.html</bt:Url>
+      </SourceLocation>
+    </ExtensionPoint>
+    
+    <ExtensionPoint xsi:type="KeyBindings">
+      <KeyBindings>
+        <KeyBinding Key="Alt+Ctrl+E" Command="ShowTaskpane"/>
+      </KeyBindings>
+    </ExtensionPoint>
+  </DesktopFormFactor>
+  
+  <bt:Urls>
+    <bt:Url id="taskpane.url">
+      <bt:UrlDefault>index.html</bt:UrlDefault>
+    </bt:Url>
+  </bt:Urls>
+  
+</OfficeApp>
