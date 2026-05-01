@@ -1,0 +1,150 @@
+/* Excel AI Add-in - Modern Linear-style */
+:root {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #242424;
+  --bg-tertiary: #2d2d2d;
+  --text-primary: #e5e5e5;
+  --text-secondary: #a1a1a1;
+  --accent: #10b981;
+  --accent-hover: #059669;
+  --border: #3d3d3d;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.app-container { display: flex; flex-direction: column; height: 100vh; padding: 12px; }
+.header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.header h1 { font-size: 16px; font-weight: 600; }
+.header button { background: transparent; border: none; cursor: pointer; font-size: 16px; }
+.privacy-bar { padding: 8px 0; }
+.privacy-bar label { display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-secondary); font-size: 12px; }
+.chat-container { flex: 1; overflow-y: auto; }
+.welcome-message { text-align: center; padding: 24px 12px; }
+.welcome-message h2 { font-size: 18px; margin-bottom: 8px; }
+.welcome-message p { color: var(--text-secondary); margin-bottom: 16px; }
+.quick-actions { display: flex; flex-direction: column; gap: 8px; }
+.quick-btn { background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-primary); padding: 10px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+.quick-btn:hover { background: var(--bg-tertiary); border-color: var(--accent); }
+.message { padding: 10px 12px; margin: 6px 0; border-radius: 8px; max-width: 90%; }
+.message.user { background: var(--accent); color: white; margin-left: auto; }
+.message.assistant { background: var(--bg-secondary); border: 1px solid var(--border); }
+.input-container { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+.input-container textarea { flex: 1; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 10px; color: var(--text-primary); resize: none; font-family: inherit; }
+.input-container textarea:focus { outline: none; border-color: var(--accent); }
+.input-container button { background: var(--accent); color: white; border: none; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; }
+.status-bar { display: flex; justify-content: space-between; padding-top: 8px; font-size: 11px; color: var(--text-secondary); }
+.loading { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Command Palette */
+.command-palette-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.command-palette-modal.show {
+  display: flex;
+}
+
+.command-palette {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 400px;
+  max-height: 400px;
+  overflow: hidden;
+}
+
+.command-palette .command-input {
+  width: 100%;
+  padding: 16px;
+  font-size: 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.command-palette .command-input:focus {
+  outline: none;
+}
+
+.command-palette .command-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.command-palette .command-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+  cursor: pointer;
+}
+
+.command-palette .command-item:hover,
+.command-palette .command-item.selected {
+  background: var(--bg-tertiary);
+}
+
+.command-palette .command-shortcut {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* Dark/Light Toggle */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.theme-toggle .toggle-track {
+  width: 40px;
+  height: 20px;
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.3s;
+}
+
+.theme-toggle .toggle-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--accent);
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s;
+}
+
+.theme-toggle.light .toggle-track {
+  background: #fbbf24;
+}
+
+.theme-toggle.light .toggle-thumb {
+  transform: translateX(20px);
+  background: #fbbf24;
+}
+
+/* Light theme variables */
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f3f4f6;
+  --bg-tertiary: #e5e7eb;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --border: #d1d5db;
+}
