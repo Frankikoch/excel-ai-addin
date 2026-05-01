@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
   console.log("🤖 Excel AI v2 initializing...");
-  
+
   // Load saved settings
   if (elements.privacyToggle) {
     elements.privacyToggle.checked = state.privacyMode;
@@ -40,7 +40,7 @@ async function init() {
   if (elements.modelDisplay) {
     elements.modelDisplay.textContent = `Modelo: ${CONFIG.model}`;
   }
-  
+
   // Event listeners
   elements.sendBtn?.addEventListener("click", sendMessage);
   elements.userInput?.addEventListener("keydown", (e) => {
@@ -51,7 +51,7 @@ async function init() {
   });
   elements.privacyToggle?.addEventListener("change", togglePrivacy);
   elements.settingsBtn?.addEventListener("click", openSettings);
-  
+
   // Quick action buttons
   document.querySelectorAll(".quick-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -59,13 +59,27 @@ async function init() {
       sendMessage(prompt);
     });
   });
-  
+
+  // Toolbar buttons
+  document.querySelectorAll(".toolbar-btn[data-cmd]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const cmd = btn.dataset.cmd;
+      const cmdMap = {
+        analyze: "Analiza los datos seleccionados en esta hoja",
+        explain: "Explica la fórmula en la celda activa",
+        fix: "Busca y corrige errores en esta hoja",
+        summarize: "Resume el contenido seleccionado"
+      };
+      if (cmdMap[cmd]) sendMessage(cmdMap[cmd]);
+    });
+  });
+
   // Connect to Excel
   await connectToExcel();
-  
+
   // Check MCP connection
   await checkMCPConnection();
-  
+
   updateStatus("🟢 Listo");
 }
 
@@ -76,7 +90,7 @@ async function checkMCPConnection() {
       method: "GET",
       signal: AbortSignal.timeout(5000)
     });
-    
+
     if (response.ok) {
       const data = await response.json();
       updateStatus(`🟢 Conectado (${data.history} msgs)`);
@@ -108,21 +122,21 @@ async function connectToExcel() {
 async function sendMessage(prompt) {
   const text = prompt || elements.userInput?.value?.trim();
   if (!text || state.isLoading) return;
-  
+
   // Add user message
   addMessage("user", text);
-  elements.userInput.value = "";
-  
+  if (!prompt && elements.userInput) elements.userInput.value = "";
+
   state.isLoading = true;
   updateStatus("⏳ Procesando...");
-  
+
   try {
     // Get selected cells context
     const context = await getCellContext();
-    
+
     // Send to MCP server
     const response = await callMCP(text, context);
-    
+
     // Add assistant response
     addMessage("assistant", response);
   } catch (error) {
@@ -138,18 +152,18 @@ async function sendMessage(prompt) {
 async function getCellContext() {
   try {
     if (typeof Excel === "undefined") return [];
-    
+
     const context = await Excel.run(async (excelContext) => {
       const range = excelContext.workbook.getSelectedRange();
       range.load(["address", "values", "formulas", "numberFormat"]);
       await excelContext.sync();
-      
+
       const cells = [];
       const values = range.values;
       const address = range.address;
       const formulas = range.formulas || [];
       const formats = range.numberFormat || [];
-      
+
       for (let i = 0; i < Math.min(values.length, 20); i++) {
         for (let j = 0; j < Math.min(values[i].length, 5); j++) {
           cells.push({
@@ -163,12 +177,12 @@ async function getCellContext() {
       }
       return cells;
     });
-    
+
     // Apply privacy if enabled
     if (state.privacyMode) {
       return applyPrivacyFilter(context);
     }
-    
+
     return context;
   } catch {
     return [];
@@ -179,7 +193,7 @@ async function getCellContext() {
 function applyPrivacyFilter(cells) {
   return cells.map(cell => ({
     ...cell,
-    value: typeof cell.value === "string" 
+    value: typeof cell.value === "string"
       ? cell.value.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[EMAIL]")
           .replace(/\b\d{3}[-.]?\d{2}[-.]?\d{4}\b/g, "[SSN]")
           .replace(/\b\d{10,}\b/g, "[ID]")
@@ -191,20 +205,25 @@ function applyPrivacyFilter(cells) {
 /// Call MCP Server
 async function callMCP(text, cellContext) {
   try {
+    const headers = { "Content-Type": "application/json" };
+    const apiKey = localStorage.getItem("apiKey");
+    if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
     const response = await fetch(`${CONFIG.mcpEndpoint}/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         message: text,
-        context: cellContext
+        context: cellContext,
+        model: state.model
       }),
       signal: AbortSignal.timeout(30000)
     });
-    
+
     if (!response.ok) {
       throw new Error(`MCP error: ${response.status}`);
     }
-    
+
     const data = await response.json();
     return data.response;
   } catch (error) {
@@ -217,57 +236,66 @@ async function callMCP(text, cellContext) {
 /// Generate mock response (fallback)
 function generateMockResponse(prompt, cellCount) {
   const lower = prompt.toLowerCase();
-  
+
   if (lower.includes("analizar") || lower.includes("análisis")) {
-    return `📊 **Análisis**\n\nCeldas seleccionadas: ${cellCount}\n\n` +
-      `Para análisis completo, conecta con MCP Server:\n` +
-      `node src/index.js\n\n` +
-      `Endpoints disponibles:\n` +
-      `- POST /chat - Chat con IA\n` +
-      `- GET /history - Historial\n` +
-      `- GET /health - Estado`;
+    return `📊 **Análisis de datos**\n\n` +
+      `He detectado ${cellCount} celdas en tu selección.\n\n` +
+      `**Modo demo activo** — Conecta un MCP Server para análisis real:\n\n` +
+      `1. Abre Settings ⚙️ (icono arriba a la derecha)\n` +
+      `2. Introduce la URL de tu servidor MCP\n` +
+      `3. Pulsa "Probar conexión" para verificar\n\n` +
+      `**Endpoints disponibles:**\n` +
+      `- POST /chat — Chat con IA\n` +
+      `- GET /health — Estado del servidor\n` +
+      `- GET /history — Historial de mensajes`;
   }
-  
+
   if (lower.includes("fórmula") || lower.includes("explicar")) {
     return `📝 **Explicador de fórmulas**\n\n` +
-      `Conecta el MCP Server para análisis real.\n\n` +
-      `Comandos disponibles en Excel:\n` +
-      `- =AIAnalyze(A1:B10)\n` +
-      `- =AIExplain(A1)\n` +
-      `- =AISummarize(A1:A5)`;
+      `**Modo demo** — Conecta el MCP Server para análisis real.\n\n` +
+      `**Fórmulas disponibles en Excel:**\n` +
+      `- =AIAnalyze(A1:B10) — Analiza un rango\n` +
+      `- =AIExplain(A1) — Explica una fórmula\n` +
+      `- =AISummarize(A1:A5) — Resume celdas de texto`;
   }
-  
-  if (lower.includes("error") || lower.includes("corregir")) {
+
+  if (lower.includes("error") || lower.includes("corregir") || lower.includes("bug")) {
     return `🐛 **Depurador de errores**\n\n` +
-      `Inicia MCP Server para análisis:\n\n` +
-      `cd ~/Documents/excel-mcp-server\n` +
-      `npm start`;
+      `Para análisis completo, conecta el MCP Server:\n\n` +
+      `Configuración → MCP Server URL → Probar conexión`;
   }
-  
+
+  if (lower.includes("resumir") || lower.includes("resumen")) {
+    return `📋 **Resumidor**\n\n` +
+      `${cellCount} celdas analizadas.\n\n` +
+      `Conecta el MCP Server para generar resúmenes con IA.`;
+  }
+
   return `🤖 **Excel AI v2**\n\n` +
-    `Mensaje: "${prompt.slice(0, 40)}..."\n` +
-    `Celdas: ${cellCount}\n` +
-    `Privacidad: ${state.privacyMode ? "🔒 ON" : "🔓 OFF"}\n\n` +
-    `Inicia MCP Server para conexión real con OpenCode`;
+    `Recibido: "${prompt.slice(0, 50)}${prompt.length > 50 ? "..." : ""}"\n` +
+    `Celdas contexto: ${cellCount}\n` +
+    `Modo privacidad: ${state.privacyMode ? "🔒 ON" : "🔓 OFF"}\n` +
+    `Modelo: ${state.model}\n\n` +
+    `💡 Usa ⚙️ para configurar el MCP Server y activar el modo IA real.`;
 }
 
 /// Add message to chat
 function addMessage(role, content) {
   if (!elements.messages) return;
-  
-  // Don't show welcome message after first real message
+
+  // Hide welcome message after first real message
   const welcome = elements.messages.querySelector(".welcome-message");
   if (welcome && role === "assistant") {
     welcome.style.display = "none";
   }
-  
+
   const div = document.createElement("div");
   div.className = `message ${role}`;
   div.textContent = content;
-  
+
   elements.messages.appendChild(div);
   elements.messages.scrollTop = elements.messages.scrollHeight;
-  
+
   state.messages.push({ role, content, timestamp: Date.now() });
 }
 
@@ -275,4 +303,168 @@ function addMessage(role, content) {
 function togglePrivacy() {
   state.privacyMode = !state.privacyMode;
   localStorage.setItem("privacyMode", state.privacyMode);
-  updateStatus(state.privacyMode ? "🔒 Privacidad ON" : "🔓 Privaci
+  updateStatus(state.privacyMode ? "🔒 Privacidad ON" : "🔓 Privacidad OFF");
+}
+
+/// Update status text
+function updateStatus(text) {
+  if (elements.status) {
+    elements.status.textContent = text;
+  }
+}
+
+/// Open settings modal
+function openSettings() {
+  initSettingsModal();
+  const modal = document.getElementById("settings-modal");
+  if (modal) {
+    modal.classList.add("show");
+    const content = modal.querySelector(".settings-content");
+    if (content) content.classList.add("active");
+    const endpointInput = modal.querySelector("#mcp-endpoint");
+    const apiKeyInput = modal.querySelector("#api-key");
+    const modelSelect = modal.querySelector("#model-select");
+    const statusEl = modal.querySelector("#settings-status");
+    if (endpointInput) endpointInput.value = CONFIG.mcpEndpoint;
+    if (apiKeyInput) apiKeyInput.value = localStorage.getItem("apiKey") || "";
+    if (modelSelect) modelSelect.value = state.model;
+    if (statusEl) statusEl.textContent = state.privacyMode ? "🔒 Privacidad" : "🔓 Normal";
+  }
+}
+
+function closeSettings() {
+  const modal = document.getElementById("settings-modal");
+  if (modal) modal.classList.remove("show");
+  const content = modal?.querySelector(".settings-content");
+  if (content) content.classList.remove("active");
+}
+
+function saveSettings() {
+  const endpoint = document.getElementById("mcp-endpoint")?.value?.trim();
+  const apiKey = document.getElementById("api-key")?.value?.trim();
+  const model = document.getElementById("model-select")?.value;
+
+  if (endpoint) {
+    localStorage.setItem("mcpEndpoint", endpoint);
+    CONFIG.mcpEndpoint = endpoint;
+  }
+  if (apiKey) {
+    localStorage.setItem("apiKey", apiKey);
+  }
+  if (model) {
+    localStorage.setItem("model", model);
+    state.model = model;
+    if (elements.modelDisplay) elements.modelDisplay.textContent = `Modelo: ${model}`;
+  }
+
+  closeSettings();
+  checkMCPConnection();
+}
+
+async function testConnection() {
+  const statusEl = document.getElementById("settings-conn-status");
+  if (statusEl) statusEl.textContent = "⏳ Probando...";
+
+  const endpoint = document.getElementById("mcp-endpoint")?.value || CONFIG.mcpEndpoint;
+
+  try {
+    const response = await fetch(`${endpoint}/health`, {
+      signal: AbortSignal.timeout(5000)
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (statusEl) statusEl.textContent = `✅ Conectado (${data.history || 0} msgs)`;
+    } else {
+      if (statusEl) statusEl.textContent = `⚠️ HTTP ${response.status}`;
+    }
+  } catch (error) {
+    if (statusEl) statusEl.textContent = `❌ ${error.message.split("\n")[0]}`;
+  }
+}
+
+/// Settings modal (lazy init)
+function initSettingsModal() {
+  if (document.getElementById("settings-modal")) return;
+
+  const modal = document.createElement("div");
+  modal.id = "settings-modal";
+  modal.className = "settings-modal";
+  modal.innerHTML = `
+    <div class="settings-content">
+      <div class="settings-header">
+        <h2>⚙️ Configuración</h2>
+        <button class="settings-close" id="settings-close-btn">✕</button>
+      </div>
+      <div class="settings-body">
+        <div class="settings-group">
+          <label for="mcp-endpoint">MCP Server URL</label>
+          <input type="url" id="mcp-endpoint" placeholder="https://your-mcp-server.trycloudflare.com" />
+          <small>URL del endpoint de tu servidor MCP. Si no tienes servidor, usa el valor por defecto.</small>
+        </div>
+        <div class="settings-group">
+          <label for="api-key">API Key</label>
+          <input type="password" id="api-key" placeholder="Tu API key (opcional)" />
+          <small>API key para autenticación con el servidor MCP.</small>
+        </div>
+        <div class="settings-group">
+          <label for="model-select">Modelo IA</label>
+          <select id="model-select">
+            <option value="opencode">OpenCode</option>
+            <option value="claude">Claude</option>
+            <option value="gpt-4">GPT-4</option>
+          </select>
+        </div>
+        <div class="settings-divider"></div>
+        <div class="settings-info">
+          <p><strong>Estado conexión:</strong> <span id="settings-conn-status">—</span></p>
+          <p><strong>Modo:</strong> <span id="settings-status">${state.privacyMode ? "🔒 Privacidad" : "🔓 Normal"}</span></p>
+          <p><strong>Versión:</strong> v0.3.0</p>
+          <p><strong>Excel:</strong> <span id="excel-status-display">Conectando...</span></p>
+        </div>
+        <div class="settings-footer">
+          <button class="btn-secondary" id="test-conn-btn">🔗 Probar</button>
+          <button class="btn-primary" id="save-settings-btn">💾 Guardar</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  // Event listeners
+  modal.querySelector("#settings-close-btn")?.addEventListener("click", closeSettings);
+  modal.querySelector("#save-settings-btn")?.addEventListener("click", saveSettings);
+  modal.querySelector("#test-conn-btn")?.addEventListener("click", testConnection);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeSettings();
+  });
+
+  // Excel status
+  if (typeof Excel !== "undefined") {
+    Excel.run(async (context) => {
+      const sheet = context.workbook.worksheets.getActiveWorksheet();
+      sheet.load("name");
+      await context.sync();
+      const el = document.getElementById("excel-status-display");
+      if (el) el.textContent = "✅ " + sheet.name;
+    }).catch(() => {
+      const el = document.getElementById("excel-status-display");
+      if (el) el.textContent = "⚠️ No detectable";
+    });
+  } else {
+    const el = document.getElementById("excel-status-display");
+    if (el) el.textContent = "⚠️ Fuera de Excel";
+  }
+}
+
+// Export for console access
+window.ExcelAI = {
+  sendMessage,
+  getCellContext,
+  togglePrivacy,
+  openSettings,
+  closeSettings,
+  testConnection,
+  state,
+  CONFIG
+};
