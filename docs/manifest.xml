@@ -1,25 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<OfficeApp xmlns="http://schemas.microsoft.com/office/2011/09/OfficeApp" xsi:type="TaskPaneApp">
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:type="TaskPaneApp">
+
   <Id>88dd7e69-9fc2-4ff1-abe0-3df420e2cffb</Id>
   <Version>1.0.0</Version>
   <ProviderName>Frankikoch</ProviderName>
   <DefaultLocale>es-ES</DefaultLocale>
   <DisplayName DefaultValue="Excel AI"/>
-  <Description DefaultValue="Asistente IA para Excel"/>
-  <Hosts><Host Name="Workbook"/></Hosts>
+  <Description DefaultValue="AI Assistant for Excel - analyze, explain and summarize your spreadsheets with AI."/>
+  <IconUrl DefaultValue="https://frankikoch.github.io/excel-ai-addin/assets/icon-80.png"/>
+  <HighResolutionIconUrl DefaultValue="https://frankikoch.github.io/excel-ai-addin/assets/icon-80.png"/>
+  <SupportUrl DefaultValue="https://github.com/Frankikoch/excel-ai-addin#readme"/>
+  <AppDomains>
+    <AppDomain>frankikoch.github.io</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Workbook"/>
+  </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.1">
+      <Set Name="WorkbookApi"/>
+    </Sets>
+  </Requirements>
   <DefaultSettings>
     <SourceLocation DefaultValue="https://frankikoch.github.io/excel-ai-addin/index.html"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
-  <VersionOverrides xmlns="http://schemas.microsoft.com/office/2016/09/TaskPaneAppVersionOverrides" xsi:type="VersionOverridesV1_0">
-    <Hosts>
-      <Host xsi:type="Workbook">
-        <DesktopFormFactor>
-          <ExtensionPoint xsi:type="TaskPane">
-            <SourceLocation DefaultValue="https://frankikoch.github.io/excel-ai-addin/index.html"/>
-          </ExtensionPoint>
-        </DesktopFormFactor>
-      </Host>
-    </Hosts>
-  </VersionOverrides>
+
 </OfficeApp>
