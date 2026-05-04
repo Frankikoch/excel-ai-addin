@@ -97,11 +97,14 @@ async function callAI(text, cellContext) {
   const url = CONFIG.aiProvider === "openrouter" ? "https://openrouter.ai/api/v1/chat/completions" : "https://opencode.ai/v1/chat/completions";
   const headers = { "Content-Type": "application/json", "Authorization": "Bearer " + CONFIG.apiKey, "HTTP-Referer": "https://frankikoch.github.io", "X-Title": "Excel AI" };
   try {
-    const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(35000) });
+    const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), mode: "cors", signal: AbortSignal.timeout(35000) });
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     const data = await resp.json();
     return data.choices?.[0]?.message?.content || data.response || "Sin respuesta";
-  } catch(e) { console.error("AI:", e); return generateMockResponse(text, cellContext?.length || 0); }
+  } catch(e) { 
+    console.error("AI Error:", e); 
+    return "⚠️ Error de conexión: " + e.message + "\n\nPrueba:\n1. Verificar API Key\n2. Usar VPN si hay bloqueo";
+  }
 }
 function generateMockResponse(p, c) {
   const l = p.toLowerCase();
@@ -141,11 +144,15 @@ function closeSettings() {
   document.querySelectorAll(".settings-content").forEach(c => c.classList.remove("active"));
 }
 function saveSettings() {
-  const p = document.getElementById("ai-provider")?.value, k = document.getElementById("api-key")?.value?.trim(), m = document.getElementById("model-select")?.value;
+  const p = document.getElementById("ai-provider")?.value || "opencode";
+  const k = document.getElementById("api-key")?.value?.trim();
+  const m = document.getElementById("model-select")?.value;
   if (p) { localStorage.setItem("aiProvider", p); CONFIG.aiProvider = p; }
   if (k) { localStorage.setItem("apiKey", k); CONFIG.apiKey = k; }
   if (m) { localStorage.setItem("model", m); state.model = m; if (elements.modelDisplay) elements.modelDisplay.textContent = "Modelo: " + m; }
   closeSettings();
+  const statusEl = document.getElementById("settings-status");
+  if (statusEl) statusEl.textContent = CONFIG.apiKey ? "✅ Guardado - Prueba enviar mensaje" : "⚠️ Sin API Key";
 }
 function initSettingsModal() {
   if (document.getElementById("settings-modal")) return;
