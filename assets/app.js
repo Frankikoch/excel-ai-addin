@@ -1,11 +1,12 @@
 /**
- * Excel AI Add-in - Main Application (v2 - with MCP connection)
+ * Excel AI Add-in - Main Application (v2 - Direct AI Mode)
  */
 
-// Configuration
+// Configuration - Use direct AI API instead of MCP server
 const CONFIG = {
-  mcpEndpoint: localStorage.getItem("mcpEndpoint") || "https://YOUR-MCP-SERVER.trycloudflare.com",
-  model: localStorage.getItem("model") || "opencode"
+  aiEndpoint: localStorage.getItem("aiEndpoint") || "",
+  apiKey: localStorage.getItem("apiKey") || "",
+  model: localStorage.getItem("model") || "opencode/m2.5-free"
 };
 
 // State
@@ -13,7 +14,8 @@ const state = {
   privacyMode: localStorage.getItem("privacyMode") !== "false",
   model: CONFIG.model,
   messages: [],
-  isLoading: false
+  isLoading: false,
+  excelConnected: false
 };
 
 // DOM Elements
@@ -33,7 +35,6 @@ document.addEventListener("DOMContentLoaded", init);
 async function init() {
   console.log("🤖 Excel AI v2 initializing...");
 
-  // Load saved settings
   if (elements.privacyToggle) {
     elements.privacyToggle.checked = state.privacyMode;
   }
@@ -41,7 +42,6 @@ async function init() {
     elements.modelDisplay.textContent = `Modelo: ${CONFIG.model}`;
   }
 
-  // Event listeners
   elements.sendBtn?.addEventListener("click", sendMessage);
   elements.userInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -52,54 +52,35 @@ async function init() {
   elements.privacyToggle?.addEventListener("change", togglePrivacy);
   elements.settingsBtn?.addEventListener("click", openSettings);
 
-  // Quick action buttons
   document.querySelectorAll(".quick-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const prompt = btn.dataset.prompt;
-      sendMessage(prompt);
-    });
+    btn.addEventListener("click", () => sendMessage(btn.dataset.prompt));
   });
 
-  // Toolbar buttons
   document.querySelectorAll(".toolbar-btn[data-cmd]").forEach(btn => {
     btn.addEventListener("click", () => {
-      const cmd = btn.dataset.cmd;
       const cmdMap = {
         analyze: "Analiza los datos seleccionados en esta hoja",
         explain: "Explica la fórmula en la celda activa",
         fix: "Busca y corrige errores en esta hoja",
         summarize: "Resume el contenido seleccionado"
       };
-      if (cmdMap[cmd]) sendMessage(cmdMap[cmd]);
+      if (cmdMap[btn.dataset.cmd]) sendMessage(cmdMap[btn.dataset.cmd]);
     });
   });
 
-  // Connect to Excel
   await connectToExcel();
+  await checkAIConnection();
 
-  // Check MCP connection
-  await checkMCPConnection();
-
-  updateStatus("🟢 Listo");
+  updateStatus(CONFIG.apiKey ? "🟢 IA lista" : "⚠️ Configura API Key");
 }
 
-/// Check MCP server connection
-async function checkMCPConnection() {
-  try {
-    const response = await fetch(`${CONFIG.mcpEndpoint}/health`, {
-      method: "GET",
-      signal: AbortSignal.timeout(5000)
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      updateStatus(`🟢 Conectado (${data.history} msgs)`);
-      console.log("✅ MCP Server connected");
-    }
-  } catch (error) {
-    console.warn("MCP Server not available:", error.message);
-    updateStatus("⚠️ MCP offline (modo demo)");
+/// Check AI API connection
+async function checkAIConnection() {
+  if (!CONFIG.apiKey && !CONFIG.aiEndpoint) {
+    updateStatus("⚠️ Sin configurar - Modo demo");
+    return false;
   }
+  return true;
 }
 
 /// Connect to Excel via Office.js
@@ -110,20 +91,21 @@ async function connectToExcel() {
         const sheet = context.workbook.worksheets.getActiveWorksheet();
         sheet.load("name");
         await context.sync();
-        console.log("📊 Connected to Excel sheet:", sheet.name);
+        state.excelConnected = true;
+        console.log("📊 Connected to Excel:", sheet.name);
+        updateStatus("📊 Excel conectado");
       });
     }
   } catch (error) {
-    console.warn("Excel context not available:", error.message);
+    console.warn("Excel context:", error.message);
   }
 }
 
-/// Send message to AI via MCP
+/// Send message to AI
 async function sendMessage(prompt) {
   const text = prompt || elements.userInput?.value?.trim();
   if (!text || state.isLoading) return;
 
-  // Add user message
   addMessage("user", text);
   if (!prompt && elements.userInput) elements.userInput.value = "";
 
@@ -131,20 +113,14 @@ async function sendMessage(prompt) {
   updateStatus("⏳ Procesando...");
 
   try {
-    // Get selected cells context
     const context = await getCellContext();
-
-    // Send to MCP server
-    const response = await callMCP(text, context);
-
-    // Add assistant response
+    const response = await callAI(text, context);
     addMessage("assistant", response);
   } catch (error) {
     addMessage("assistant", "❌ Error: " + error.message);
-    console.error("MCP Error:", error);
   } finally {
     state.isLoading = false;
-    updateStatus("🟢 Listo");
+    updateStatus(CONFIG.apiKey ? "🟢 IA lista" : "⚠️ Modo demo");
   }
 }
 
@@ -153,7 +129,7 @@ async function getCellContext() {
   try {
     if (typeof Excel === "undefined") return [];
 
-    const context = await Excel.run(async (excelContext) => {
+    return await Excel.run(async (excelContext) => {
       const range = excelContext.workbook.getSelectedRange();
       range.load(["address", "values", "formulas", "numberFormat"]);
       await excelContext.sync();
@@ -161,195 +137,191 @@ async function getCellContext() {
       const cells = [];
       const values = range.values;
       const address = range.address;
-      const formulas = range.formulas || [];
-      const formats = range.numberFormat || [];
 
-      for (let i = 0; i < Math.min(values.length, 20); i++) {
-        for (let j = 0; j < Math.min(values[i].length, 5); j++) {
-          cells.push({
-            address: address.split("!")[1] || address,
-            value: values[i][j],
-            formula: formulas[i]?.[j] ? `=${formulas[i][j]}` : undefined,
-            dataType: typeof values[i][j],
-            format: formats[i]?.[j]
-          });
+      for (let i = 0; i < Math.min(values.length, 50); i++) {
+        for (let j = 0; j < Math.min(values[i].length, 10); j++) {
+          if (values[i][j] !== null && values[i][j] !== "") {
+            cells.push({
+              address: address.split("!")[1] || address,
+              value: values[i][j],
+              row: i + 1,
+              col: j + 1
+            });
+          }
         }
       }
       return cells;
     });
-
-    // Apply privacy if enabled
-    if (state.privacyMode) {
-      return applyPrivacyFilter(context);
-    }
-
-    return context;
   } catch {
     return [];
   }
 }
 
-/// Apply privacy filter (anonymize sensitive data)
+/// Apply privacy filter
 function applyPrivacyFilter(cells) {
   return cells.map(cell => ({
     ...cell,
     value: typeof cell.value === "string"
       ? cell.value.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[EMAIL]")
           .replace(/\b\d{3}[-.]?\d{2}[-.]?\d{4}\b/g, "[SSN]")
-          .replace(/\b\d{10,}\b/g, "[ID]")
-      : cell.value,
-    formula: undefined // Never send formulas to external AI
+      : cell.value
   }));
 }
 
-/// Call MCP Server
-async function callMCP(text, cellContext) {
-  try {
-    const headers = { "Content-Type": "application/json" };
-    const apiKey = localStorage.getItem("apiKey");
-    if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+/// Call AI API
+async function callAI(text, cellContext) {
+  // If no API key, use mock/demo mode
+  if (!CONFIG.apiKey) {
+    return generateMockResponse(text, cellContext?.length || 0);
+  }
 
-    const response = await fetch(`${CONFIG.mcpEndpoint}/chat`, {
+  const hasContext = cellContext && cellContext.length > 0;
+  const contextInfo = hasContext 
+    ? `\n\n📊 **Contexto de celdas (${cellContext.length}):**\n` + cellContext.slice(0, 20).map(c => 
+        `${c.address}: ${c.value}`).join("\n")
+    : "\n\n⚠️ No hay celdas seleccionadas. Selecciona un rango de celdas primero.";
+
+  const systemPrompt = `Eres un asistente de Excel análisis de datos. Ayudas a analizar hojas de cálculo, explicar fórmulas, corregir errores y resumir datos. Responde en español.`;
+
+  try {
+    const response = await fetch("https://opencode.ai/api/chat", {
       method: "POST",
-      headers,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${CONFIG.apiKey}`
+      },
       body: JSON.stringify({
-        message: text,
-        context: cellContext,
-        model: state.model
+        model: CONFIG.model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: text + contextInfo }
+        ]
       }),
-      signal: AbortSignal.timeout(30000)
+      signal: AbortSignal.timeout(45000)
     });
 
     if (!response.ok) {
-      throw new Error(`MCP error: ${response.status}`);
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${response.status}`);
     }
 
     const data = await response.json();
-    return data.response;
+    return data.choices?.[0]?.message?.content || data.response || "Sin respuesta";
   } catch (error) {
-    // Fallback to mock if MCP unavailable
-    console.warn("MCP call failed, using mock:", error.message);
+    console.error("AI Error:", error);
     return generateMockResponse(text, cellContext?.length || 0);
   }
 }
 
-/// Generate mock response (fallback)
+/// Generate mock response
 function generateMockResponse(prompt, cellCount) {
   const lower = prompt.toLowerCase();
 
   if (lower.includes("analizar") || lower.includes("análisis")) {
     return `📊 **Análisis de datos**\n\n` +
-      `He detectado ${cellCount} celdas en tu selección.\n\n` +
-      `**Modo demo activo** — Conecta un MCP Server para análisis real:\n\n` +
-      `1. Abre Settings ⚙️ (icono arriba a la derecha)\n` +
-      `2. Introduce la URL de tu servidor MCP\n` +
-      `3. Pulsa "Probar conexión" para verificar\n\n` +
-      `**Endpoints disponibles:**\n` +
-      `- POST /chat — Chat con IA\n` +
-      `- GET /health — Estado del servidor\n` +
-      `- GET /history — Historial de mensajes`;
+      `Celdas detectadas: ${cellCount}\n\n` +
+      `**Para análisis real:**\n` +
+      `1. Haz clic en ⚙️ (arriba derecha)\n` +
+      `2. Introduce tu API Key de OpenCode\n` +
+      `3. Selecciona celdas en Excel\n` +
+      `4. Envía tu pregunta\n\n` +
+      `**Sin API Key = modo demo** (responde ejemplos genéricos)`;
   }
 
   if (lower.includes("fórmula") || lower.includes("explicar")) {
     return `📝 **Explicador de fórmulas**\n\n` +
-      `**Modo demo** — Conecta el MCP Server para análisis real.\n\n` +
-      `**Fórmulas disponibles en Excel:**\n` +
-      `- =AIAnalyze(A1:B10) — Analiza un rango\n` +
-      `- =AIExplain(A1) — Explica una fórmula\n` +
-      `- =AISummarize(A1:A5) — Resume celdas de texto`;
+      `Selecciona una celda con fórmula y pregúntame.\n\n` +
+      `Ejemplos de fórmulas Excel:\n` +
+      `- =SUM(A1:A10) — Suma valores\n` +
+      `- =BUSCARV(...) — Busca en tabla\n` +
+      `- =SI(C1>10,"Mayor","Menor") — Condicional`;
   }
 
-  if (lower.includes("error") || lower.includes("corregir") || lower.includes("bug")) {
-    return `🐛 **Depurador de errores**\n\n` +
-      `Para análisis completo, conecta el MCP Server:\n\n` +
-      `Configuración → MCP Server URL → Probar conexión`;
+  if (lower.includes("error") || lower.includes("corregir")) {
+    return `🐛 **Corrector de errores**\n\n` +
+      `Selecciona celdas con errores y te ayudo.\n\n` +
+      `Errores comunes:\n` +
+      `- #¡DIV/0! — División por cero\n` +
+      `- #¡REF! — Referencia inválida\n` +
+      `- #¿NOMBRE? — Función desconocida`;
   }
 
-  if (lower.includes("resumir") || lower.includes("resumen")) {
+  if (lower.includes("resumir")) {
     return `📋 **Resumidor**\n\n` +
       `${cellCount} celdas analizadas.\n\n` +
-      `Conecta el MCP Server para generar resúmenes con IA.`;
+      `Selecciona más datos para un resumen completo.`;
   }
 
-  return `🤖 **Excel AI v2**\n\n` +
-    `Recibido: "${prompt.slice(0, 50)}${prompt.length > 50 ? "..." : ""}"\n` +
-    `Celdas contexto: ${cellCount}\n` +
-    `Modo privacidad: ${state.privacyMode ? "🔒 ON" : "🔓 OFF"}\n` +
-    `Modelo: ${state.model}\n\n` +
-    `💡 Usa ⚙️ para configurar el MCP Server y activar el modo IA real.`;
+  return `🤖 **Excel AI**\n\n` +
+    `Recibido: "${prompt.slice(0, 40)}${prompt.length > 40 ? "..." : ""}"\n` +
+    `Celdas: ${cellCount}\n` +
+    `Modo: ${state.privacyMode ? "🔒 Privacidad" : "🔓 Normal"}\n\n` +
+    `💡 Configura tu API Key en ⚙️ para activar la IA real.`;
 }
 
 /// Add message to chat
 function addMessage(role, content) {
   if (!elements.messages) return;
 
-  // Hide welcome message after first real message
   const welcome = elements.messages.querySelector(".welcome-message");
-  if (welcome && role === "assistant") {
-    welcome.style.display = "none";
-  }
+  if (welcome && role === "assistant") welcome.style.display = "none";
 
   const div = document.createElement("div");
   div.className = `message ${role}`;
   div.textContent = content;
-
   elements.messages.appendChild(div);
   elements.messages.scrollTop = elements.messages.scrollHeight;
-
   state.messages.push({ role, content, timestamp: Date.now() });
 }
 
-/// Toggle privacy mode
+/// Toggle privacy
 function togglePrivacy() {
   state.privacyMode = !state.privacyMode;
   localStorage.setItem("privacyMode", state.privacyMode);
-  updateStatus(state.privacyMode ? "🔒 Privacidad ON" : "🔓 Privacidad OFF");
+  updateStatus(state.privacyMode ? "🔒 Privacidad ON" : "🔓 Normal");
 }
 
-/// Update status text
+/// Update status
 function updateStatus(text) {
-  if (elements.status) {
-    elements.status.textContent = text;
-  }
+  if (elements.status) elements.status.textContent = text;
 }
 
-/// Open settings modal
+/// Settings
 function openSettings() {
   initSettingsModal();
   const modal = document.getElementById("settings-modal");
-  if (modal) {
-    modal.classList.add("show");
-    const content = modal.querySelector(".settings-content");
-    if (content) content.classList.add("active");
-    const endpointInput = modal.querySelector("#mcp-endpoint");
-    const apiKeyInput = modal.querySelector("#api-key");
-    const modelSelect = modal.querySelector("#model-select");
-    const statusEl = modal.querySelector("#settings-status");
-    if (endpointInput) endpointInput.value = CONFIG.mcpEndpoint;
-    if (apiKeyInput) apiKeyInput.value = localStorage.getItem("apiKey") || "";
-    if (modelSelect) modelSelect.value = state.model;
-    if (statusEl) statusEl.textContent = state.privacyMode ? "🔒 Privacidad" : "🔓 Normal";
-  }
+  if (modal) modal.classList.add("show");
+  
+  const contents = document.querySelectorAll(".settings-content");
+  contents.forEach(c => c.classList.add("active"));
+
+  const endpointInput = document.getElementById("ai-endpoint");
+  const apiKeyInput = document.getElementById("api-key");
+  const modelSelect = document.getElementById("model-select");
+  
+  if (endpointInput) endpointInput.value = CONFIG.aiEndpoint;
+  if (apiKeyInput) apiKeyInput.value = CONFIG.apiKey;
+  if (modelSelect) modelSelect.value = state.model;
 }
 
 function closeSettings() {
   const modal = document.getElementById("settings-modal");
   if (modal) modal.classList.remove("show");
-  const content = modal?.querySelector(".settings-content");
-  if (content) content.classList.remove("active");
+  document.querySelectorAll(".settings-content").forEach(c => c.classList.remove("active"));
 }
 
 function saveSettings() {
-  const endpoint = document.getElementById("mcp-endpoint")?.value?.trim();
+  const endpoint = document.getElementById("ai-endpoint")?.value?.trim();
   const apiKey = document.getElementById("api-key")?.value?.trim();
   const model = document.getElementById("model-select")?.value;
 
   if (endpoint) {
-    localStorage.setItem("mcpEndpoint", endpoint);
-    CONFIG.mcpEndpoint = endpoint;
+    localStorage.setItem("aiEndpoint", endpoint);
+    CONFIG.aiEndpoint = endpoint;
   }
   if (apiKey) {
     localStorage.setItem("apiKey", apiKey);
+    CONFIG.apiKey = apiKey;
   }
   if (model) {
     localStorage.setItem("model", model);
@@ -358,23 +330,34 @@ function saveSettings() {
   }
 
   closeSettings();
-  checkMCPConnection();
+  checkAIConnection();
 }
 
 async function testConnection() {
-  const statusEl = document.getElementById("settings-conn-status");
+  const statusEl = document.getElementById("settings-status");
   if (statusEl) statusEl.textContent = "⏳ Probando...";
 
-  const endpoint = document.getElementById("mcp-endpoint")?.value || CONFIG.mcpEndpoint;
+  if (!CONFIG.apiKey) {
+    if (statusEl) statusEl.textContent = "⚠️ Sin API Key";
+    return;
+  }
 
   try {
-    const response = await fetch(`${endpoint}/health`, {
-      signal: AbortSignal.timeout(5000)
+    const response = await fetch("https://opencode.ai/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${CONFIG.apiKey}`
+      },
+      body: JSON.stringify({
+        model: CONFIG.model,
+        messages: [{ role: "user", content: "hola" }]
+      }),
+      signal: AbortSignal.timeout(10000)
     });
 
     if (response.ok) {
-      const data = await response.json();
-      if (statusEl) statusEl.textContent = `✅ Conectado (${data.history || 0} msgs)`;
+      if (statusEl) statusEl.textContent = "✅ ¡Conectado!";
     } else {
       if (statusEl) statusEl.textContent = `⚠️ HTTP ${response.status}`;
     }
@@ -383,7 +366,7 @@ async function testConnection() {
   }
 }
 
-/// Settings modal (lazy init)
+/// Settings modal
 function initSettingsModal() {
   if (document.getElementById("settings-modal")) return;
 
@@ -398,29 +381,24 @@ function initSettingsModal() {
       </div>
       <div class="settings-body">
         <div class="settings-group">
-          <label for="mcp-endpoint">MCP Server URL</label>
-          <input type="url" id="mcp-endpoint" placeholder="https://your-mcp-server.trycloudflare.com" />
-          <small>URL del endpoint de tu servidor MCP. Si no tienes servidor, usa el valor por defecto.</small>
+          <label for="api-key">API Key (OpenCode)</label>
+          <input type="password" id="api-key" placeholder="sk-..." />
+          <small>Obtén tu API Key en <a href="https://opencode.ai" target="_blank">opencode.ai</a></small>
         </div>
         <div class="settings-group">
-          <label for="api-key">API Key</label>
-          <input type="password" id="api-key" placeholder="Tu API key (opcional)" />
-          <small>API key para autenticación con el servidor MCP.</small>
-        </div>
-        <div class="settings-group">
-          <label for="model-select">Modelo IA</label>
+          <label for="model-select">Modelo</label>
           <select id="model-select">
-            <option value="opencode">OpenCode</option>
-            <option value="claude">Claude</option>
-            <option value="gpt-4">GPT-4</option>
+            <option value="opencode/m2.5-free">OpenCode m2.5 (free)</option>
+            <option value="opencode/m3.1-free">OpenCode m3.1 (free)</option>
+            <option value="claude-3-haiku">Claude 3 Haiku</option>
+            <option value="gpt-4o-mini">GPT-4o Mini</option>
           </select>
         </div>
         <div class="settings-divider"></div>
         <div class="settings-info">
-          <p><strong>Estado conexión:</strong> <span id="settings-conn-status">—</span></p>
-          <p><strong>Modo:</strong> <span id="settings-status">${state.privacyMode ? "🔒 Privacidad" : "🔓 Normal"}</span></p>
-          <p><strong>Versión:</strong> v0.3.0</p>
+          <p><strong>Estado:</strong> <span id="settings-status">—</span></p>
           <p><strong>Excel:</strong> <span id="excel-status-display">Conectando...</span></p>
+          <p><strong>Versión:</strong> v2.0</p>
         </div>
         <div class="settings-footer">
           <button class="btn-secondary" id="test-conn-btn">🔗 Probar</button>
@@ -431,15 +409,11 @@ function initSettingsModal() {
   `;
   document.body.appendChild(modal);
 
-  // Event listeners
   modal.querySelector("#settings-close-btn")?.addEventListener("click", closeSettings);
   modal.querySelector("#save-settings-btn")?.addEventListener("click", saveSettings);
   modal.querySelector("#test-conn-btn")?.addEventListener("click", testConnection);
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) closeSettings();
-  });
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeSettings(); });
 
-  // Excel status
   if (typeof Excel !== "undefined") {
     Excel.run(async (context) => {
       const sheet = context.workbook.worksheets.getActiveWorksheet();
@@ -457,14 +431,4 @@ function initSettingsModal() {
   }
 }
 
-// Export for console access
-window.ExcelAI = {
-  sendMessage,
-  getCellContext,
-  togglePrivacy,
-  openSettings,
-  closeSettings,
-  testConnection,
-  state,
-  CONFIG
-};
+window.ExcelAI = { sendMessage, getCellContext, togglePrivacy, openSettings, closeSettings, testConnection, state, CONFIG };
