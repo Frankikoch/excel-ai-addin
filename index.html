@@ -4,6 +4,162 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🤖 Excel AI</title>
+  <script>
+const CONFIG = {
+  aiProvider: localStorage.getItem("aiProvider") || "openrouter",
+  apiKey: localStorage.getItem("apiKey") || "",
+  model: localStorage.getItem("model") || "openai/gpt-4o-mini"
+};
+const state = {
+  privacyMode: localStorage.getItem("privacyMode") !== "false",
+  model: CONFIG.model,
+  messages: [],
+  isLoading: false,
+  excelConnected: false
+};
+const elements = {
+  userInput: document.getElementById("user-input"),
+  sendBtn: document.getElementById("send-btn"),
+  messages: document.getElementById("messages"),
+  status: document.getElementById("status"),
+  privacyToggle: document.getElementById("privacy-toggle"),
+  settingsBtn: document.getElementById("settings-btn"),
+  modelDisplay: document.getElementById("model-display")
+};
+document.addEventListener("DOMContentLoaded", init);
+async function init() {
+  console.log("🤖 Excel AI v2.1 initializing...");
+  if (elements.privacyToggle) elements.privacyToggle.checked = state.privacyMode;
+  if (elements.modelDisplay) elements.modelDisplay.textContent = `Modelo: ${CONFIG.model}`;
+  elements.sendBtn?.addEventListener("click", sendMessage);
+  elements.userInput?.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } });
+  elements.privacyToggle?.addEventListener("change", togglePrivacy);
+  elements.settingsBtn?.addEventListener("click", openSettings);
+  document.querySelectorAll(".quick-btn").forEach(btn => btn.addEventListener("click", () => sendMessage(btn.dataset.prompt)));
+  document.querySelectorAll(".toolbar-btn[data-cmd]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const cmdMap = { analyze: "Analiza los datos en esta hoja", explain: "Explica la fórmula activa", fix: "Corrige errores", summarize: " resume el contenido" };
+      if (cmdMap[btn.dataset.cmd]) sendMessage(cmdMap[btn.dataset.cmd]);
+    });
+  });
+  await connectToExcel();
+  updateStatus(CONFIG.apiKey ? "🟢 IA lista" : "⚠️ Configura API Key");
+}
+async function connectToExcel() {
+  try {
+    if (typeof Excel !== "undefined") {
+      await Excel.run(async ctx => {
+        const sheet = ctx.workbook.worksheets.getActiveWorksheet();
+        sheet.load("name");
+        await ctx.sync();
+        state.excelConnected = true;
+        console.log("📊 Excel:", sheet.name);
+      });
+    }
+  } catch(e) { console.warn("Excel:", e.message); }
+}
+async function sendMessage(prompt) {
+  const text = prompt || elements.userInput?.value?.trim();
+  if (!text || state.isLoading) return;
+  addMessage("user", text);
+  if (!prompt && elements.userInput) elements.userInput.value = "";
+  state.isLoading = true;
+  updateStatus("⏳ Procesando...");
+  try {
+    const context = await getCellContext();
+    const response = await callAI(text, context);
+    addMessage("assistant", response);
+  } catch(e) { addMessage("assistant", "❌ " + e.message); }
+  finally { state.isLoading = false; updateStatus(CONFIG.apiKey ? "🟢 IA lista" : "⚠️ Modo demo"); }
+}
+async function getCellContext() {
+  try {
+    if (typeof Excel === "undefined") return [];
+    return await Excel.run(async ctx => {
+      const range = ctx.workbook.getSelectedRange();
+      range.load(["address", "values"]);
+      await ctx.sync();
+      const cells = [];
+      for (let i = 0; i < Math.min(range.values.length, 30); i++) {
+        for (let j = 0; j < Math.min(range.values[i].length, 8); j++) {
+          if (range.values[i][j] != null) cells.push({ address: range.address, value: range.values[i][j] });
+        }
+      }
+      return state.privacyMode ? cells.map(c => ({...c, value: typeof c.value === "string" ? c.value.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, "[EMAIL]") : c.value})) : cells;
+    });
+  } catch { return []; }
+}
+async function callAI(text, cellContext) {
+  if (!CONFIG.apiKey) return generateMockResponse(text, cellContext?.length || 0);
+  const hasCtx = cellContext?.length > 0;
+  const ctxInfo = hasCtx ? "\n\n📊 Contexto (" + cellContext.length + "):\n" + cellContext.slice(0,10).map(c => c.address + ": " + c.value).join("\n") : "\n\n⚠️ Selecciona celdas primero.";
+  const body = { model: CONFIG.model, messages: [{ role: "system", content: "Excel assistant. Respond in Spanish." }, { role: "user", content: text + ctxInfo }], max_tokens: 800 };
+  const url = CONFIG.aiProvider === "openrouter" ? "https://openrouter.ai/api/v1/chat/completions" : "https://opencode.ai/v1/chat/completions";
+  const headers = { "Content-Type": "application/json", "Authorization": "Bearer " + CONFIG.apiKey, "HTTP-Referer": "https://frankikoch.github.io", "X-Title": "Excel AI" };
+  try {
+    const resp = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(35000) });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const data = await resp.json();
+    return data.choices?.[0]?.message?.content || data.response || "Sin respuesta";
+  } catch(e) { console.error("AI:", e); return generateMockResponse(text, cellContext?.length || 0); }
+}
+function generateMockResponse(p, c) {
+  const l = p.toLowerCase();
+  if (l.includes("analizar")) return "📊 Análisis\n\nCeldas: " + c + "\n\n⚙️ Configura API Key en ⚙️ para IA real.";
+  if (l.includes("fórmula")) return "📝 Selecciona celda con fórmula.";
+  if (l.includes("error")) return "🐛 Selecciona celdas con errores.";
+  if (l.includes("resumir")) return "📋 " + c + " celdas.";
+  return "🤖 Excel AI v2.1\n\nRecibido: " + p.slice(0,30) + "\nCeldas: " + c + "\n⚙️ Configura API Key";
+}
+function addMessage(r, c) {
+  if (!elements.messages) return;
+  const w = elements.messages.querySelector(".welcome-message");
+  if (w && r === "assistant") w.style.display = "none";
+  const d = document.createElement("div");
+  d.className = "message " + r;
+  d.textContent = c;
+  elements.messages.appendChild(d);
+  elements.messages.scrollTop = elements.messages.scrollHeight;
+}
+function togglePrivacy() {
+  state.privacyMode = !state.privacyMode;
+  localStorage.setItem("privacyMode", state.privacyMode);
+  updateStatus(state.privacyMode ? "🔒 Privacidad" : "🔓 Normal");
+}
+function updateStatus(t) { if (elements.status) elements.status.textContent = t; }
+function openSettings() {
+  initSettingsModal();
+  document.getElementById("settings-modal")?.classList.add("show");
+  document.querySelectorAll(".settings-content").forEach(c => c.classList.add("active"));
+  const ps = document.getElementById("ai-provider"), ki = document.getElementById("api-key"), ms = document.getElementById("model-select");
+  if (ps) ps.value = CONFIG.aiProvider;
+  if (ki) ki.value = CONFIG.apiKey;
+  if (ms) ms.value = state.model;
+}
+function closeSettings() {
+  document.getElementById("settings-modal")?.classList.remove("show");
+  document.querySelectorAll(".settings-content").forEach(c => c.classList.remove("active"));
+}
+function saveSettings() {
+  const p = document.getElementById("ai-provider")?.value, k = document.getElementById("api-key")?.value?.trim(), m = document.getElementById("model-select")?.value;
+  if (p) { localStorage.setItem("aiProvider", p); CONFIG.aiProvider = p; }
+  if (k) { localStorage.setItem("apiKey", k); CONFIG.apiKey = k; }
+  if (m) { localStorage.setItem("model", m); state.model = m; if (elements.modelDisplay) elements.modelDisplay.textContent = "Modelo: " + m; }
+  closeSettings();
+}
+function initSettingsModal() {
+  if (document.getElementById("settings-modal")) return;
+  const m = document.createElement("div");
+  m.id = "settings-modal";
+  m.className = "settings-modal";
+  m.innerHTML = `<div class="settings-content"><div class="settings-header"><h2>⚙️ Configuración</h2><button class="settings-close" id="settings-close-btn">✕</button></div><div class="settings-body"><div class="settings-group"><label>Proveedor</label><select id="ai-provider"><option value="openrouter">OpenRouter</option><option value="opencode">OpenCode</option></select></div><div class="settings-group"><label>API Key</label><input type="password" id="api-key" placeholder="sk-..."><small><a href="https://openrouter.ai" target="_blank">openrouter.ai</a></small></div><div class="settings-group"><label>Modelo</label><select id="model-select"><option value="openai/gpt-4o-mini">GPT-4o Mini</option><option value="anthropic/claude-3.5-haiku">Claude 3.5</option><option value="google/gemini-flash-1.5">Gemini Flash</option></select></div><div class="settings-divider"></div><p><strong>Estado:</strong> <span id="settings-status">—</span></p><p><strong>Excel:</strong> <span id="excel-status-display">—</span></p><p>v2.1</p><div class="settings-footer"><button class="btn-secondary" id="save-settings-btn">💾 Guardar</button></div></div></div>`;
+  document.body.appendChild(m);
+  m.querySelector("#settings-close-btn")?.addEventListener("click", closeSettings);
+  m.querySelector("#save-settings-btn")?.addEventListener("click", saveSettings);
+  m.addEventListener("click", e => { if (e.target === m) closeSettings(); });
+}
+window.ExcelAI = { sendMessage, state, CONFIG };
+  </script>
   <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
@@ -16,28 +172,22 @@
         <button id="settings-btn" title="Configuración">⚙️</button>
       </div>
     </header>
-    
     <div class="toolbar">
-      <button class="toolbar-btn" data-cmd="analyze" title="Ctrl+Shift+A">📊 Analizar</button>
-      <button class="toolbar-btn" data-cmd="explain" title="Ctrl+Shift+E">📝 Explicar</button>
-      <button class="toolbar-btn" data-cmd="fix" title="Ctrl+Shift+F">🐛 Corregir</button>
-      <button class="toolbar-btn" data-cmd="summarize" title="Ctrl+Shift+S">📋 Resumir</button>
-      <button class="toolbar-btn" id="cmd-palette-btn" title="Ctrl+K">⌘ Paleta</button>
+      <button class="toolbar-btn" data-cmd="analyze">📊 Analizar</button>
+      <button class="toolbar-btn" data-cmd="explain">📝 Explicar</button>
+      <button class="toolbar-btn" data-cmd="fix">🐛 Corregir</button>
+      <button class="toolbar-btn" data-cmd="summarize">📋 Resumir</button>
+      <button class="toolbar-btn" id="cmd-palette-btn">⌘ Paleta</button>
     </div>
-    
     <div class="privacy-bar">
-      <label>
-        <input type="checkbox" id="privacy-toggle" checked>
-        🔒 Privacidad
-      </label>
+      <label><input type="checkbox" id="privacy-toggle" checked> 🔒 Privacidad</label>
       <span class="status-text" id="status">🟢 Listo</span>
     </div>
-    
     <div class="chat-container" id="chat-container">
       <div class="welcome-message">
         <h2>Bienvenido a Excel AI 🤖</h2>
         <p>Tu asistente de IA integrado en Excel</p>
-        <p class="shortcut-hint">Usa <kbd>Ctrl+K</kbd> paraCommands rápidos</p>
+        <p class="shortcut-hint">Usa <kbd>Ctrl+K</kbd></p>
         <div class="quick-actions">
           <button class="quick-btn" data-prompt="Analiza esta hoja de cálculo">📊 Analizar datos</button>
           <button class="quick-btn" data-prompt="Explica esta fórmula">📝 Explicar fórmula</button>
@@ -46,28 +196,16 @@
       </div>
       <div id="messages"></div>
     </div>
-    
     <div class="citations-bar" id="cell-citations"></div>
-    
     <div class="input-container">
-      <textarea id="user-input" placeholder="Pregunta o describe lo que necesitas..." rows="2"></textarea>
+      <textarea id="user-input" placeholder="Pregunta..." rows="2"></textarea>
       <button id="send-btn">Enviar</button>
     </div>
-    
     <footer class="status-bar">
       <span id="model-display">Modelo: OpenCode</span>
       <span id="version">v2.1</span>
     </footer>
   </div>
-  
-  <!-- Components -->
-  <script  src="components/model-selector.js"></script>
-  <script  src="components/theme-toggle.js"></script>
-  <script  src="components/command-palette.js"></script>
-  <script  src="components/diff-preview.js"></script>
-  <script  src="components/cell-citations.js"></script>
-  <script  src="components/audit-log.js"></script>
-  <script src="assets/app.bundle.js?v=20260505b"></script>
 </body>
 </html>
-<!-- force deploy Tue May 05 10:45:00 2026 -->
+<!-- v2.1 inline -->
