@@ -2,11 +2,11 @@
  * Excel AI Add-in - Main Application (v2 - Direct AI Mode)
  */
 
-// Configuration - Use direct AI API instead of MCP server
+// Configuration - Direct AI API (OpenRouter or OpenCode)
 const CONFIG = {
-  aiEndpoint: localStorage.getItem("aiEndpoint") || "",
+  aiProvider: localStorage.getItem("aiProvider") || "openrouter", // "openrouter" or "opencode"
   apiKey: localStorage.getItem("apiKey") || "",
-  model: localStorage.getItem("model") || "opencode/m2.5-free"
+  model: localStorage.getItem("model") || "openai/gpt-4o-mini"
 };
 
 // State
@@ -168,45 +168,68 @@ function applyPrivacyFilter(cells) {
   }));
 }
 
-/// Call AI API
+/// Call AI API (supports OpenRouter and OpenCode)
 async function callAI(text, cellContext) {
-  // If no API key, use mock/demo mode
+  // Demo mode if no API key
   if (!CONFIG.apiKey) {
     return generateMockResponse(text, cellContext?.length || 0);
   }
 
   const hasContext = cellContext && cellContext.length > 0;
   const contextInfo = hasContext 
-    ? `\n\n📊 **Contexto de celdas (${cellContext.length}):**\n` + cellContext.slice(0, 20).map(c => 
+    ? `\n\n📊 **Context (${cellContext.length} cells):**\n` + cellContext.slice(0, 15).map(c => 
         `${c.address}: ${c.value}`).join("\n")
-    : "\n\n⚠️ No hay celdas seleccionadas. Selecciona un rango de celdas primero.";
+    : "\n\n⚠️ No cells selected. Select a range first.";
 
-  const systemPrompt = `Eres un asistente de Excel análisis de datos. Ayudas a analizar hojas de cálculo, explicar fórmulas, corregir errores y resumir datos. Responde en español.`;
+
+  const systemPrompt = "You are an Excel data analysis assistant. Help analyze spreadsheets, explain formulas, fix errors. Respond in user's language.";
+
+  const body = {
+    model: CONFIG.model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: text + contextInfo }
+    ],
+    max_tokens: 1000
+  };
+
+  let url, headers;
+
+
+  if (CONFIG.aiProvider === "openrouter") {
+    url = "https://openrouter.ai/api/v1/chat/completions";
+    headers = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${CONFIG.apiKey}`,
+      "HTTP-Referer": "https://frankikoch.github.io",
+      "X-Title": "Excel AI"
+    };
+  } else {
+    url = "https://opencode.ai/v1/chat/completions";
+    headers = {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${CONFIG.apiKey}`
+    };
+  }
 
   try {
-    const response = await fetch("https://opencode.ai/api/chat", {
+    const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${CONFIG.apiKey}`
-      },
-      body: JSON.stringify({
-        model: CONFIG.model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: text + contextInfo }
-        ]
-      }),
+      headers,
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(45000)
     });
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${response.status}`);
+      throw new Error(err.error?.message || err.message || `HTTP ${response.status}`);
     }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || data.response || "Sin respuesta";
+    return data.choices?.[0]?.message?.content 
+      || data.choices?.[0]?.text?.content
+      || data.output?.[0]?.content?.text
+      || "No response received";
   } catch (error) {
     console.error("AI Error:", error);
     return generateMockResponse(text, cellContext?.length || 0);
@@ -292,14 +315,13 @@ function openSettings() {
   const modal = document.getElementById("settings-modal");
   if (modal) modal.classList.add("show");
   
-  const contents = document.querySelectorAll(".settings-content");
-  contents.forEach(c => c.classList.add("active"));
+  document.querySelectorAll(".settings-content").forEach(c => c.classList.add("active"));
 
-  const endpointInput = document.getElementById("ai-endpoint");
+  const providerSelect = document.getElementById("ai-provider");
   const apiKeyInput = document.getElementById("api-key");
   const modelSelect = document.getElementById("model-select");
   
-  if (endpointInput) endpointInput.value = CONFIG.aiEndpoint;
+  if (providerSelect) providerSelect.value = CONFIG.aiProvider;
   if (apiKeyInput) apiKeyInput.value = CONFIG.apiKey;
   if (modelSelect) modelSelect.value = state.model;
 }
@@ -311,13 +333,13 @@ function closeSettings() {
 }
 
 function saveSettings() {
-  const endpoint = document.getElementById("ai-endpoint")?.value?.trim();
+  const provider = document.getElementById("ai-provider")?.value;
   const apiKey = document.getElementById("api-key")?.value?.trim();
   const model = document.getElementById("model-select")?.value;
 
-  if (endpoint) {
-    localStorage.setItem("aiEndpoint", endpoint);
-    CONFIG.aiEndpoint = endpoint;
+  if (provider) {
+    localStorage.setItem("aiProvider", provider);
+    CONFIG.aiProvider = provider;
   }
   if (apiKey) {
     localStorage.setItem("apiKey", apiKey);
@@ -342,17 +364,14 @@ async function testConnection() {
     return;
   }
 
+
+  const url = CONFIG.aiProvider === "openrouter" 
+    ? "https://openrouter.ai/api/v1/models" 
+    : "https://opencode.ai/v1/models";
+
   try {
-    const response = await fetch("https://opencode.ai/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${CONFIG.apiKey}`
-      },
-      body: JSON.stringify({
-        model: CONFIG.model,
-        messages: [{ role: "user", content: "hola" }]
-      }),
+    const response = await fetch(url, {
+      headers: { "Authorization": `Bearer ${CONFIG.apiKey}` },
       signal: AbortSignal.timeout(10000)
     });
 
@@ -381,24 +400,31 @@ function initSettingsModal() {
       </div>
       <div class="settings-body">
         <div class="settings-group">
-          <label for="api-key">API Key (OpenCode)</label>
+          <label for="ai-provider">Proveedor</label>
+          <select id="ai-provider">
+            <option value="openrouter">OpenRouter (Recomendado)</option>
+            <option value="opencode">OpenCode</option>
+          </select>
+        </div>
+        <div class="settings-group">
+          <label for="api-key">API Key</label>
           <input type="password" id="api-key" placeholder="sk-..." />
-          <small>Obtén tu API Key en <a href="https://opencode.ai" target="_blank">opencode.ai</a></small>
+          <small>Obtén tu key en <a href="https://openrouter.ai" target="_blank">openrouter.ai</a></small>
         </div>
         <div class="settings-group">
           <label for="model-select">Modelo</label>
           <select id="model-select">
-            <option value="opencode/m2.5-free">OpenCode m2.5 (free)</option>
-            <option value="opencode/m3.1-free">OpenCode m3.1 (free)</option>
-            <option value="claude-3-haiku">Claude 3 Haiku</option>
-            <option value="gpt-4o-mini">GPT-4o Mini</option>
+            <option value="openai/gpt-4o-mini">GPT-4o Mini (Gratis)</option>
+            <option value="anthropic/claude-3.5-haiku">Claude 3.5 Haiku</option>
+            <option value="google/gemini-flash-1.5">Gemini Flash 1.5</option>
+            <option value="meta-llama/llama-3.1-8b-instruct">Llama 3.1</option>
           </select>
         </div>
         <div class="settings-divider"></div>
         <div class="settings-info">
           <p><strong>Estado:</strong> <span id="settings-status">—</span></p>
           <p><strong>Excel:</strong> <span id="excel-status-display">Conectando...</span></p>
-          <p><strong>Versión:</strong> v2.0</p>
+          <p><strong>Versión:</strong> v2.1</p>
         </div>
         <div class="settings-footer">
           <button class="btn-secondary" id="test-conn-btn">🔗 Probar</button>
