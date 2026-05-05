@@ -42,7 +42,8 @@ async function init() {
   }
 
   // Event listeners
-  elements.sendBtn?.addEventListener("click", sendMessage);
+  // Avoid passing PointerEvent as prompt argument
+  elements.sendBtn?.addEventListener("click", () => sendMessage());
   elements.userInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -81,6 +82,15 @@ async function init() {
   await checkMCPConnection();
 
   updateStatus("🟢 Listo");
+
+  // Sync header model selector -> app state
+  window.addEventListener("modelChanged", function(e) {
+    const model = e?.detail?.model;
+    if (!model) return;
+    state.model = model;
+    localStorage.setItem("model", model);
+    if (elements.modelDisplay) elements.modelDisplay.textContent = `Modelo: ${model}`;
+  });
 }
 
 /// Check MCP server connection
@@ -235,7 +245,8 @@ async function callMCP(text, cellContext) {
 
 /// Generate mock response (fallback)
 function generateMockResponse(prompt, cellCount) {
-  const lower = prompt.toLowerCase();
+  const promptStr = typeof prompt === "string" ? prompt : String(prompt || "");
+  const lower = promptStr.toLowerCase();
 
   if (lower.includes("analizar") || lower.includes("análisis")) {
     return `📊 **Análisis de datos**\n\n` +
@@ -272,7 +283,7 @@ function generateMockResponse(prompt, cellCount) {
   }
 
   return `🤖 **Excel AI v2**\n\n` +
-    `Recibido: "${prompt.slice(0, 50)}${prompt.length > 50 ? "..." : ""}"\n` +
+    `Recibido: "${promptStr.slice(0, 50)}${promptStr.length > 50 ? "..." : ""}"\n` +
     `Celdas contexto: ${cellCount}\n` +
     `Modo privacidad: ${state.privacyMode ? "🔒 ON" : "🔓 OFF"}\n` +
     `Modelo: ${state.model}\n\n` +
@@ -412,7 +423,8 @@ function initSettingsModal() {
           <select id="model-select">
             <option value="opencode">OpenCode</option>
             <option value="claude">Claude</option>
-            <option value="gpt-4">GPT-4</option>
+            <option value="gemini">Gemini</option>
+            <option value="openrouter">OpenRouter</option>
           </select>
         </div>
         <div class="settings-divider"></div>
