@@ -7,10 +7,11 @@ export function initModelSelector(container) {
   const models = [
     { id: "opencode", name: "OpenCode", icon: "🤖", desc: "IA local" },
     { id: "claude", name: "Claude", icon: "📘", desc: "Anthropic" },
-    { id: "gemini", name: "Gemini", icon: "💎", desc: "Google" }
+    { id: "gemini", name: "Gemini", icon: "💎", desc: "Google" },
+    { id: "openrouter", name: "OpenRouter", icon: "🔗", desc: "Múltiples modelos" }
   ];
   
-  const current = localStorage.getItem("aiModel") || "opencode";
+  const current = localStorage.getItem("model") || "opencode";
   
   let html = '<div class="model-selector">';
   html += '<div class="model-current">';
@@ -57,13 +58,13 @@ export function initModelSelector(container) {
   });
   
   return {
-    getModel: function() { return localStorage.getItem("aiModel") || "opencode"; },
+    getModel: function() { return localStorage.getItem("model") || "opencode"; },
     setModel: function(id) { selectModel(id, models); }
   };
 }
 
 function selectModel(id, models) {
-  localStorage.setItem("aiModel", id);
+  localStorage.setItem("model", id);
   
   const model = models.find(m => m.id === id);
   document.querySelectorAll(".model-option").forEach(function(opt) {

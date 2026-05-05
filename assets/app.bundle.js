@@ -42,7 +42,7 @@ async function init() {
     elements.modelDisplay.textContent = `Modelo: ${CONFIG.model}`;
   }
 
-  elements.sendBtn?.addEventListener("click", sendMessage);
+  elements.sendBtn?.addEventListener("click", () => sendMessage());
   elements.userInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -238,7 +238,8 @@ async function callAI(text, cellContext) {
 
 /// Generate mock response
 function generateMockResponse(prompt, cellCount) {
-  const lower = prompt.toLowerCase();
+  const promptStr = typeof prompt === 'string' ? prompt : String(prompt || '');
+  const lower = promptStr.toLowerCase();
 
   if (lower.includes("analizar") || lower.includes("análisis")) {
     return `📊 **Análisis de datos**\n\n` +
@@ -414,6 +415,8 @@ function initSettingsModal() {
         <div class="settings-group">
           <label for="model-select">Modelo</label>
           <select id="model-select">
+            <option value="opencode">OpenCode (Local)</option>
+            <option value="claude">Claude</option>
             <option value="openai/gpt-4o-mini">GPT-4o Mini (Gratis)</option>
             <option value="anthropic/claude-3.5-haiku">Claude 3.5 Haiku</option>
             <option value="google/gemini-flash-1.5">Gemini Flash 1.5</option>
