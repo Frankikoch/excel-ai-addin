@@ -6,9 +6,11 @@
 export function initModelSelector(container) {
   const models = [
     { id: "opencode", name: "OpenCode", icon: "🤖", desc: "IA local" },
+    { id: "nvidia", name: "NVIDIA", icon: "🚀", desc: "NVIDIA NIM" },
     { id: "claude", name: "Claude", icon: "📘", desc: "Anthropic" },
     { id: "gemini", name: "Gemini", icon: "💎", desc: "Google" },
-    { id: "openrouter", name: "OpenRouter", icon: "🔗", desc: "Múltiples modelos" }
+    { id: "openrouter", name: "OpenRouter", icon: "🔗", desc: "Múltiples modelos" },
+    { id: "excel-mcp", name: "Excel MCP", icon: "📊", desc: "Automatización Excel" }
   ];
   
   const current = localStorage.getItem("model") || "opencode";

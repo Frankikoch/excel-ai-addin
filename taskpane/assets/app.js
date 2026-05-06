@@ -5,6 +5,7 @@
 // Configuration
 const CONFIG = {
   mcpEndpoint: localStorage.getItem("mcpEndpoint") || "http://192.168.1.44:3749",
+  excelMcpEndpoint: localStorage.getItem("excelMcpEndpoint") || "http://localhost:8765",
   model: localStorage.getItem("model") || "opencode"
 };
 
@@ -60,6 +61,9 @@ async function init() {
     });
   });
   
+  // Excel automation buttons (when Excel MCP is selected)
+  setupExcelAutomationButtons();
+  
   // Connect to Excel
   await connectToExcel();
   
@@ -80,6 +84,7 @@ async function init() {
 
 /// Check MCP server connection
 async function checkMCPConnection() {
+  // Check regular AI MCP
   try {
     const response = await fetch(`${CONFIG.mcpEndpoint}/health`, {
       method: "GET",
@@ -88,12 +93,29 @@ async function checkMCPConnection() {
     
     if (response.ok) {
       const data = await response.json();
-      updateStatus(`🟢 Conectado (${data.history} msgs)`);
-      console.log("✅ MCP Server connected");
+      updateStatus(`🟢 Conectado IA (${data.history} msgs)`);
+      console.log("✅ AI MCP Server connected");
     }
   } catch (error) {
-    console.warn("MCP Server not available:", error.message);
-    updateStatus("⚠️ MCP offline (modo demo)");
+    console.warn("AI MCP Server not available:", error.message);
+  }
+  
+  // Check Excel MCP connection
+  if (state.model === "excel-mcp") {
+    try {
+      const excelResponse = await fetch(`${CONFIG.excelMcpEndpoint}/health`, {
+        method: "GET",
+        signal: AbortSignal.timeout(5000)
+      });
+      
+      if (excelResponse.ok) {
+        updateStatus("🟢 Excel MCP conectado");
+        console.log("✅ Excel MCP connected");
+      }
+    } catch (error) {
+      console.warn("Excel MCP not available:", error.message);
+      updateStatus("⚠️ Excel MCP no disponible");
+    }
   }
 }
 
@@ -197,8 +219,14 @@ function applyPrivacyFilter(cells) {
   }));
 }
 
-/// Call MCP Server
+/// Call MCP Server (AI or Excel Automation)
 async function callMCP(text, cellContext) {
+  // Use Excel MCP for automation commands
+  if (state.model === "excel-mcp") {
+    return await callExcelMCP(text, cellContext);
+  }
+  
+  // Default: Use regular AI MCP
   try {
     const response = await fetch(`${CONFIG.mcpEndpoint}/chat`, {
       method: "POST",
@@ -220,6 +248,35 @@ async function callMCP(text, cellContext) {
     // Fallback to mock if MCP unavailable
     console.warn("MCP call failed, using mock:", error.message);
     return generateMockResponse(text, cellContext?.length || 0);
+  }
+}
+
+/// Call Excel MCP Server for automation
+async function callExcelMCP(text, cellContext) {
+  try {
+    const response = await fetch(`${CONFIG.excelMcpEndpoint}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: text,
+        context: cellContext
+      }),
+      signal: AbortSignal.timeout(60000)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Excel MCP error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.response || data.message || "Comando enviado a Excel MCP";
+  } catch (error) {
+    return "❌ Excel MCP no disponible.\n\n" +
+      "Para usar automatización de Excel:\n" +
+      "1. Descarga mcp-excel.exe de:\n" +
+      "   https://github.com/sbroenne/mcp-server-excel/releases\n" +
+      "2. Ejecuta: node excel-mcp-bridge.js\n" +
+      "3. Asegúrate de tener Excel abierto";
   }
 }
 
@@ -259,6 +316,105 @@ function generateMockResponse(prompt, cellCount) {
     `Celdas: ${cellCount}\n` +
     `Privacidad: ${state.privacyMode ? "🔒 ON" : "🔓 OFF"}\n\n` +
     `Inicia MCP Server para conexión real con OpenCode`;
+}
+
+/// Setup Excel automation buttons
+function setupExcelAutomationButtons() {
+  const excelBtns = document.querySelectorAll('.excel-mcp-btn');
+  const excelPrompts = {
+    pivot: "Crea una PivotTable con los datos seleccionados mostrando totales por categoría",
+    chart: "Crea un gráfico de barras con los datos seleccionados",
+    table: "Convierte este rango en una tabla de Excel con estilo",
+    formula: "Agrega una fórmula para calcular totales en esta columna"
+  };
+  
+  excelBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cmd = btn.dataset.cmd;
+      if (excelPrompts[cmd]) {
+        // Switch to Excel MCP if not already selected
+        if (state.model !== "excel-mcp") {
+          state.model = "excel-mcp";
+          localStorage.setItem("model", "excel-mcp");
+          if (elements.modelDisplay) elements.modelDisplay.textContent = "Modelo: Excel MCP";
+        }
+        sendMessage(excelPrompts[cmd]);
+      }
+    });
+  });
+  
+  // Toolbar command buttons
+  document.querySelectorAll('.toolbar-btn[data-cmd]').forEach(btn => {
+    if (!btn.classList.contains('excel-mcp-btn')) {
+      btn.addEventListener('click', () => {
+        const cmd = btn.dataset.cmd;
+        const prompts = {
+          analyze: "Analiza los datos seleccionados y sugiere insights",
+          explain: "Explica la fórmula o valor de la celda activa",
+          fix: "Identifica y corrige errores en esta hoja",
+          summarize: "Resume los datos y estructura de esta hoja"
+        };
+        if (prompts[cmd]) sendMessage(prompts[cmd]);
+      });
+    }
+  });
+}
+
+/// Open settings modal
+function openSettings() {
+  const existing = document.querySelector('.settings-modal');
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  
+  const modal = document.createElement('div');
+  modal.className = 'settings-modal';
+  modal.innerHTML = `
+    <div class="settings-content">
+      <h2>⚙️ Configuración</h2>
+      <div class="settings-group">
+        <label>Endpoint IA (MCP)</label>
+        <input type="text" id="mcp-endpoint-input" value="${CONFIG.mcpEndpoint}" placeholder="http://192.168.1.44:3749">
+      </div>
+      <div class="settings-group">
+        <label>Endpoint Excel MCP</label>
+        <input type="text" id="excel-mcp-endpoint-input" value="${CONFIG.excelMcpEndpoint}" placeholder="http://localhost:8765">
+      </div>
+      <div class="settings-group">
+        <label>API Key (NVIDIA/OpenAI)</label>
+        <input type="password" id="api-key-input" value="${localStorage.getItem('apiKey') || ''}" placeholder="Tu API key">
+      </div>
+      <div class="settings-actions">
+        <button id="save-settings">💾 Guardar</button>
+        <button id="close-settings">✖️ Cerrar</button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  modal.querySelector('#save-settings').addEventListener('click', () => {
+    const mcpEndpoint = document.getElementById('mcp-endpoint-input').value;
+    const excelMcpEndpoint = document.getElementById('excel-mcp-endpoint-input').value;
+    const apiKey = document.getElementById('api-key-input').value;
+    
+    localStorage.setItem('mcpEndpoint', mcpEndpoint);
+    localStorage.setItem('excelMcpEndpoint', excelMcpEndpoint);
+    localStorage.setItem('apiKey', apiKey);
+    
+    CONFIG.mcpEndpoint = mcpEndpoint;
+    CONFIG.excelMcpEndpoint = excelMcpEndpoint;
+    
+    updateStatus("✅ Configuración guardada");
+    modal.remove();
+    checkMCPConnection();
+  });
+  
+  modal.querySelector('#close-settings').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
 }
 
 /// Add message to chat
