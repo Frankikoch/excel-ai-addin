@@ -208,8 +208,10 @@ function applyPrivacyFilter(cells) {
 async function callMCP(text, cellContext) {
   try {
     const headers = { "Content-Type": "application/json" };
-    const apiKey = localStorage.getItem("apiKey");
+    const apiKey = localStorage.getItem("apiKey") || "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";
     if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
+    console.log(">>> CALLMCP:", CONFIG.mcpEndpoint, "provider:", state.provider, "model:", state.model);
 
     const response = await fetch(`${CONFIG.mcpEndpoint}/chat`, {
       method: "POST",
@@ -228,8 +230,10 @@ async function callMCP(text, cellContext) {
     }
 
     const data = await response.json();
+    console.log(">>> CALLMCP OK:", data.response?.slice(0,100));
     return data.response;
   } catch (error) {
+    console.error(">>> CALLMCP FAILED:", error.message);
     // Fallback to mock if MCP unavailable
     console.warn("MCP call failed, using mock:", error.message);
     return generateMockResponse(text, cellContext?.length || 0);
