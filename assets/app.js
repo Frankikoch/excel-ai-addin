@@ -418,6 +418,7 @@ function initSettingsModal() {
             <option value="openai">OpenAI</option>
             <option value="anthropic">Anthropic</option>
             <option value="google">Google</option>
+            <option value="nvidia">NVIDIA</option>
           </select>
         </div>
         <div class="settings-group">
@@ -486,6 +487,11 @@ function initSettingsModal() {
       { id: "google/gemini-1.0-pro", name: "Gemini 1.0 Pro" },
       { id: "google/gemini-2.0-flash-exp", name: "Gemini 2.0 Flash" },
       { id: "google/gemini-2.0-pro-exp", name: "Gemini 2.0 Pro" }
+    ],
+    "nvidia": [
+      { id: "minimaxai/minimax-m2.7", name: "MiniMax M2.7" },
+      { id: "nvidia/llama-3.1-nemotron-70b-instruct:free", name: "Nemotron 70B" },
+      { id: "nvidia/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B" }
     ]
   };
 
