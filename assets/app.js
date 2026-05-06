@@ -329,6 +329,8 @@ function openSettings() {
     const modelSelect = modal.querySelector("#model-select");
     const statusEl = modal.querySelector("#settings-status");
     if (endpointInput) endpointInput.value = CONFIG.mcpEndpoint;
+    const apiKeyInput = modal.querySelector("#api-key");
+    if (apiKeyInput) apiKeyInput.value = localStorage.getItem("apiKey") || "";
     if (providerSelect) {
       providerSelect.value = state.provider;
       // Trigger change to populate models
@@ -354,6 +356,10 @@ function saveSettings() {
   if (endpoint) {
     localStorage.setItem("mcpEndpoint", endpoint);
     CONFIG.mcpEndpoint = endpoint;
+  }
+  const apiKey = document.getElementById("api-key")?.value?.trim();
+  if (apiKey) {
+    localStorage.setItem("apiKey", apiKey);
   }
   if (provider) {
     localStorage.setItem("provider", provider);
@@ -409,6 +415,11 @@ function initSettingsModal() {
           <label for="mcp-endpoint">MCP Server URL</label>
           <input type="url" id="mcp-endpoint" placeholder="https://tu-tunnel.loca.lt" />
           <small>URL de tu servidor MCP (Flask en Colab)</small>
+        </div>
+        <div class="settings-group">
+          <label for="api-key">API Key</label>
+          <input type="password" id="api-key" placeholder="Tu API key (NVIDIA/OpenRouter)" />
+          <small>API key que se pasará al servidor MCP</small>
         </div>
         <div class="settings-group">
           <label for="provider-select">Proveedor</label>
