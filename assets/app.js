@@ -64,15 +64,37 @@ async function init() {
 
   // Toolbar buttons
   document.querySelectorAll(".toolbar-btn[data-cmd]").forEach(btn => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       const cmd = btn.dataset.cmd;
-      const cmdMap = {
-        analyze: "Analiza los datos seleccionados en esta hoja",
-        explain: "Explica la fórmula en la celda activa",
-        fix: "Busca y corrige errores en esta hoja",
-        summarize: "Resume el contenido seleccionado"
-      };
-      if (cmdMap[cmd]) sendMessage(cmdMap[cmd]);
+      
+      // Get active cell context
+      let cellInfo = "";
+      try {
+        const context = await getActiveCellContext();
+        if (context.formula) {
+          cellInfo = `Celda ${context.address} tiene la fórmula: ${context.formula}`;
+        } else if (context.value) {
+          cellInfo = `Celda ${context.address} tiene el valor: ${context.value}`;
+        } else {
+          cellInfo = `Celda activa: ${context.address}`;
+        }
+      } catch (e) {
+        console.warn("Could not get cell context:", e);
+      }
+
+      // Build contextual prompt
+      let prompt = "";
+      if (cmd === "analyze") {
+        prompt = `Analiza los datos seleccionados en esta hoja de cálculo. ${cellInfo}. Proporciona insights y conclusiones útiles.`;
+      } else if (cmd === "explain") {
+        prompt = `Explica la fórmula de la celda activa. ${cellInfo}. Dame una explicación clara de qué hace y cómo funciona.`;
+      } else if (cmd === "fix") {
+        prompt = `Busca y corrige errores en la fórmula de la celda activa. ${cellInfo}. Si hay errores, sugiero la solución correcta.`;
+      } else if (cmd === "summarize") {
+        prompt = `Resume el contenido de las celdas seleccionadas. ${cellInfo}. Proporciona un resumen conciso.`;
+      }
+      
+      if (prompt) sendMessage(prompt);
     });
   });
 
@@ -188,6 +210,31 @@ async function getCellContext() {
     return context;
   } catch {
     return [];
+  }
+}
+
+/// Get active cell context (single cell)
+async function getActiveCellContext() {
+  try {
+    if (typeof Excel === "undefined") return { address: "", value: "", formula: "" };
+
+    const context = await Excel.run(async (excelContext) => {
+      const sheet = excelContext.workbook.worksheets.getActiveWorksheet();
+      const activeCell = sheet.getActiveCell();
+      activeCell.load(["address", "value", "formula"]);
+      await excelContext.sync();
+
+      return {
+        address: activeCell.address.split("!")[1] || activeCell.address,
+        value: activeCell.value,
+        formula: activeCell.formula ? `=${activeCell.formula}` : ""
+      };
+    });
+
+    return context;
+  } catch (e) {
+    console.warn("getActiveCellContext error:", e);
+    return { address: "", value: "", formula: "" };
   }
 }
 
