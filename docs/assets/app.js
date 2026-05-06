@@ -5,12 +5,14 @@
 // Configuration
 const CONFIG = {
   mcpEndpoint: localStorage.getItem("mcpEndpoint") || "https://YOUR-MCP-SERVER.trycloudflare.com",
-  model: localStorage.getItem("model") || "opencode"
+  provider: localStorage.getItem("provider") || "opencode",
+  model: localStorage.getItem("model") || "minimax-m2.5-free"
 };
 
 // State
 const state = {
   privacyMode: localStorage.getItem("privacyMode") !== "false",
+  provider: CONFIG.provider,
   model: CONFIG.model,
   messages: [],
   isLoading: false
@@ -215,6 +217,7 @@ async function callMCP(text, cellContext) {
       body: JSON.stringify({
         message: text,
         context: cellContext,
+        provider: state.provider,
         model: state.model
       }),
       signal: AbortSignal.timeout(30000)
@@ -322,12 +325,16 @@ function openSettings() {
     const content = modal.querySelector(".settings-content");
     if (content) content.classList.add("active");
     const endpointInput = modal.querySelector("#mcp-endpoint");
-    const apiKeyInput = modal.querySelector("#api-key");
+    const providerSelect = modal.querySelector("#provider-select");
     const modelSelect = modal.querySelector("#model-select");
     const statusEl = modal.querySelector("#settings-status");
     if (endpointInput) endpointInput.value = CONFIG.mcpEndpoint;
-    if (apiKeyInput) apiKeyInput.value = localStorage.getItem("apiKey") || "";
-    if (modelSelect) modelSelect.value = state.model;
+    if (providerSelect) {
+      providerSelect.value = state.provider;
+      // Trigger change to populate models
+      providerSelect.dispatchEvent(new Event("change"));
+    }
+    if (modelSelect) setTimeout(() => { modelSelect.value = state.model; }, 0);
     if (statusEl) statusEl.textContent = state.privacyMode ? "🔒 Privacidad" : "🔓 Normal";
   }
 }
@@ -341,20 +348,21 @@ function closeSettings() {
 
 function saveSettings() {
   const endpoint = document.getElementById("mcp-endpoint")?.value?.trim();
-  const apiKey = document.getElementById("api-key")?.value?.trim();
+  const provider = document.getElementById("provider-select")?.value;
   const model = document.getElementById("model-select")?.value;
 
   if (endpoint) {
     localStorage.setItem("mcpEndpoint", endpoint);
     CONFIG.mcpEndpoint = endpoint;
   }
-  if (apiKey) {
-    localStorage.setItem("apiKey", apiKey);
+  if (provider) {
+    localStorage.setItem("provider", provider);
+    state.provider = provider;
   }
   if (model) {
     localStorage.setItem("model", model);
     state.model = model;
-    if (elements.modelDisplay) elements.modelDisplay.textContent = `Modelo: ${model}`;
+    if (elements.modelDisplay) elements.modelDisplay.textContent = `Modelo: ${model.split(":")[0] || model}`;
   }
 
   closeSettings();
@@ -399,27 +407,30 @@ function initSettingsModal() {
       <div class="settings-body">
         <div class="settings-group">
           <label for="mcp-endpoint">MCP Server URL</label>
-          <input type="url" id="mcp-endpoint" placeholder="https://your-mcp-server.trycloudflare.com" />
-          <small>URL del endpoint de tu servidor MCP. Si no tienes servidor, usa el valor por defecto.</small>
+          <input type="url" id="mcp-endpoint" placeholder="https://tu-tunnel.loca.lt" />
+          <small>URL de tu servidor MCP (Flask en Colab)</small>
         </div>
         <div class="settings-group">
-          <label for="api-key">API Key</label>
-          <input type="password" id="api-key" placeholder="Tu API key (opcional)" />
-          <small>API key para autenticación con el servidor MCP.</small>
+          <label for="provider-select">Proveedor</label>
+          <select id="provider-select">
+            <option value="opencode">OpenCode (MiniMax Free)</option>
+            <option value="openrouter">OpenRouter (Free)</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="google">Google</option>
+          </select>
         </div>
         <div class="settings-group">
-          <label for="model-select">Modelo IA</label>
+          <label for="model-select">Modelo</label>
           <select id="model-select">
-            <option value="opencode">OpenCode</option>
-            <option value="claude">Claude</option>
-            <option value="gpt-4">GPT-4</option>
+            <option value="minimax-m2.5-free">MiniMax M2.5 Free</option>
           </select>
         </div>
         <div class="settings-divider"></div>
         <div class="settings-info">
           <p><strong>Estado conexión:</strong> <span id="settings-conn-status">—</span></p>
           <p><strong>Modo:</strong> <span id="settings-status">${state.privacyMode ? "🔒 Privacidad" : "🔓 Normal"}</span></p>
-          <p><strong>Versión:</strong> v0.3.0</p>
+          <p><strong>Versión:</strong> v0.3.1</p>
           <p><strong>Excel:</strong> <span id="excel-status-display">Conectando...</span></p>
         </div>
         <div class="settings-footer">
@@ -437,6 +448,53 @@ function initSettingsModal() {
   modal.querySelector("#test-conn-btn")?.addEventListener("click", testConnection);
   modal.addEventListener("click", (e) => {
     if (e.target === modal) closeSettings();
+  });
+
+  // Modelos por proveedor
+  const MODELS_BY_PROVIDER = {
+    "opencode": [
+      { id: "minimax-m2.5-free", name: "MiniMax M2.5 Free" }
+    ],
+    "openrouter": [
+      { id: "meta-llama/llama-3.1-8b-instruct:free", name: "Meta Llama 3.1 8B" },
+      { id: "qwen/qwen2.5-7b-instruct:free", name: "Qwen 2.5 7B" },
+      { id: "mistralai/mistral-7b-instruct:free", name: "Mistral 7B" },
+      { id: "google/gemma-3-1b-it:free", name: "Google Gemma 3 1B" },
+      { id: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free", name: "Nvidia Nemotron 3 Nano" },
+      { id: "google/gemma-4-26b-a4b-it:free", name: "Google Gemma 4 26B" }
+    ],
+    "openai": [
+      { id: "openai/gpt-4o-mini", name: "GPT-4o Mini" },
+      { id: "openai/gpt-4o", name: "GPT-4o" },
+      { id: "openai/gpt-4-turbo", name: "GPT-4 Turbo" },
+      { id: "openai/gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
+      { id: "openai/o1-mini", name: "o1 Mini" },
+      { id: "openai/o1", name: "o1" }
+    ],
+    "anthropic": [
+      { id: "anthropic/claude-3.5-haiku", name: "Claude 3.5 Haiku" },
+      { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" },
+      { id: "anthropic/claude-3-opus", name: "Claude 3 Opus" },
+      { id: "anthropic/claude-3-sonnet", name: "Claude 3 Sonnet" },
+      { id: "anthropic/claude-3-haiku", name: "Claude 3 Haiku" },
+      { id: "anthropic/claude-2.1", name: "Claude 2.1" }
+    ],
+    "google": [
+      { id: "google/gemini-flash-1.5-8b", name: "Gemini Flash 1.5" },
+      { id: "google/gemini-pro-1.5", name: "Gemini Pro 1.5" },
+      { id: "google/gemini-1.5-flash-8b", name: "Gemini 1.5 Flash 8B" },
+      { id: "google/gemini-1.0-pro", name: "Gemini 1.0 Pro" },
+      { id: "google/gemini-2.0-flash-exp", name: "Gemini 2.0 Flash" },
+      { id: "google/gemini-2.0-pro-exp", name: "Gemini 2.0 Pro" }
+    ]
+  };
+
+  // Cuando cambia el proveedor, actualizar modelos
+  const providerSelect = modal.querySelector("#provider-select");
+  const modelSelect = modal.querySelector("#model-select");
+  providerSelect?.addEventListener("change", function() {
+    const models = MODELS_BY_PROVIDER[this.value] || [];
+    modelSelect.innerHTML = models.map(m => `<option value="${m.id}">${m.name}</option>`).join("");
   });
 
   // Excel status
