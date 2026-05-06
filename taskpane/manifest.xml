@@ -4,7 +4,7 @@
            xsi:type="TaskpaneApp">
   
   <Id>excel-ai-addin-v1</Id>
-  <Version>1.0.0</Version>
+  <Version>1.0.2</Version>
   <ProviderName>franki</ProviderName>
   <DefaultLocale>es-ES</DefaultLocale>
   <DisplayName DefaultValue="Excel AI"/>
